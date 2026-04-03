@@ -17,6 +17,9 @@ jobs:
           cache: npm
 
       - name: Install and build
+        env:
+          # Optional: same as local .env — Vite loadEnv with empty prefix merges process.env
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           npm ci
           npm run build
