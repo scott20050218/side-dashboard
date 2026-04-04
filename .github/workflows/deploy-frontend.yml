@@ -1,8 +1,11 @@
-name: Deploy to server
+name: Deploy frontend
 
 on:
   push:
     branches: [main]
+    paths:
+      - "front-end/**"
+      - "package-lock.json"
   workflow_dispatch:
 
 jobs:
@@ -15,14 +18,12 @@ jobs:
         with:
           node-version: "22"
           cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Install and build
-        env:
-          # Optional: same as local .env — Vite loadEnv with empty prefix merges process.env
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           npm ci
-          npm run build
+          npm run build -w front-end
 
       - name: Start ssh-agent
         uses: webfactory/ssh-agent@v0.9.0
@@ -36,4 +37,4 @@ jobs:
 
       - name: Rsync dist to server
         run: |
-          rsync -avz --delete -e ssh ./dist/ ubuntu@51.20.192.16:/home/ubuntu/node/
+          rsync -avz --delete -e ssh ./front-end/dist/ ubuntu@51.20.192.16:/home/ubuntu/node/

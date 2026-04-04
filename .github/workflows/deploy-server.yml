@@ -1,0 +1,61 @@
+name: Deploy server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - "package-lock.json"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install and build server
+        run: |
+          npm ci
+          npm run build -w server
+
+      - name: Start ssh-agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add host to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H 51.20.192.16 >> ~/.ssh/known_hosts
+
+      - name: Rsync server to host
+        run: |
+          rsync -avz \
+            --exclude node_modules \
+            --exclude .env \
+            --exclude '*.db' \
+            -e ssh ./server/ ubuntu@51.20.192.16:/home/ubuntu/server/
+
+      - name: Install prod deps and reload pm2
+        run: |
+          ssh ubuntu@51.20.192.16 'bash -s' <<'REMOTE'
+          set -e
+          cd /home/ubuntu/server
+          npm ci --omit=dev
+          if command -v pm2 >/dev/null 2>&1; then
+            if pm2 describe dashboard-server >/dev/null 2>&1; then
+              pm2 reload dashboard-server --update-env
+            else
+              pm2 start dist/index.js --name dashboard-server
+            fi
+          else
+            echo "pm2 not found; run manually: cd /home/ubuntu/server && node dist/index.js"
+          fi
+          REMOTE
