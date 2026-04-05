@@ -87,5 +87,7 @@ location /api/ {
 
 ## 更多文档
 
+- [`doc/user-guide.md`](doc/user-guide.md) — 终端用户使用手册（登录、门店、角色、各模块说明）
+- [`doc/deploy-and-maintenance.md`](doc/deploy-and-maintenance.md) — 生产部署、CI、Nginx、pm2 与故障排查
 - [`doc/store-boss-permissions.md`](doc/store-boss-permissions.md) — 门店老板 / 成员权限与数据隔离说明
 - [`doc/plan.md`](doc/plan.md) — 产品与技术规划摘录
