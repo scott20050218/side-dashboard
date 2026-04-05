@@ -1,8 +1,12 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+/** 与 cwd 无关：生产环境 pm2 的工作目录不一定是 server 根目录 */
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 import { getDb } from './db.js';
 import { authJwt } from './middleware/authJwt.js';
 import { requireStoreMember } from './middleware/storeMember.js';
@@ -16,7 +20,6 @@ import { createStoresRouter } from './routes/stores.js';
 import { createAmendmentsRouter } from './routes/amendments.js';
 import { createAdminStoresRouter } from './routes/adminStores.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 const databasePath = process.env.DATABASE_PATH
   ? path.resolve(rootDir, process.env.DATABASE_PATH)

@@ -486,8 +486,9 @@ function seedIfEmpty(database: Database.Database) {
     },
   ];
 
+  /** 迁移里可能已插入「股东」「老板」等；users 仍为空时不应因重复角色名崩溃 */
   const insertRole = database.prepare(
-    'INSERT INTO roles (id, name, permissions) VALUES (@id, @name, @permissions)',
+    'INSERT OR IGNORE INTO roles (id, name, permissions) VALUES (@id, @name, @permissions)',
   );
   for (const r of roles) insertRole.run(r);
 
