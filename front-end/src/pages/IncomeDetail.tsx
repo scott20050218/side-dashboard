@@ -3,38 +3,29 @@ import { motion } from 'motion/react';
 import { ChevronLeft, Plus } from 'lucide-react';
 import { View, Transaction } from '../types';
 import { DateFilter, FilterType } from '../components/DateFilter';
+import { filterByDateFilter } from '../lib/transactionDateFilter';
 
 interface IncomeDetailProps {
   setView: (view: View) => void;
   incomeList: Transaction[];
   setShowAddModal: (view: View | null) => void;
+  canCreate?: boolean;
+  onRequestAmend?: (item: Transaction) => void;
 }
 
-export const IncomeDetail = ({ setView, incomeList, setShowAddModal }: IncomeDetailProps) => {
+export const IncomeDetail = ({
+  setView,
+  incomeList,
+  setShowAddModal,
+  canCreate = true,
+  onRequestAmend,
+}: IncomeDetailProps) => {
   const [filter, setFilter] = useState<{ type: FilterType; start?: string; end?: string }>({ type: 'day' });
 
-  const filteredList = useMemo(() => {
-    const today = new Date('2026-04-04'); // Assuming today is 2026-04-04 for mock data
-    
-    return incomeList.filter(item => {
-      const itemDate = new Date(item.date);
-      
-      if (filter.type === 'day') {
-        return item.date === '2026-04-04';
-      } else if (filter.type === 'week') {
-        const diffTime = Math.abs(today.getTime() - itemDate.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return diffDays <= 7;
-      } else if (filter.type === 'month') {
-        return itemDate.getMonth() === today.getMonth() && itemDate.getFullYear() === today.getFullYear();
-      } else if (filter.type === 'custom' && filter.start && filter.end) {
-        const start = new Date(filter.start);
-        const end = new Date(filter.end);
-        return itemDate >= start && itemDate <= end;
-      }
-      return true;
-    });
-  }, [incomeList, filter]);
+  const filteredList = useMemo(
+    () => filterByDateFilter(incomeList, filter),
+    [incomeList, filter],
+  );
 
   const handleFilterChange = (type: FilterType, start?: string, end?: string) => {
     setFilter({ type, start, end });
@@ -51,12 +42,15 @@ export const IncomeDetail = ({ setView, incomeList, setShowAddModal }: IncomeDet
           <ChevronLeft size={24} />
         </button>
         <h2 className="text-xl font-black tracking-tight text-[#1E293B]">收入管理</h2>
-        <button 
-          onClick={() => setShowAddModal('income')}
-          className="ml-auto w-12 h-12 rounded-2xl bg-primary text-white flex items-center justify-center shadow-lg glow-purple"
-        >
-          <Plus size={24} />
-        </button>
+        {canCreate ? (
+          <button
+            type="button"
+            onClick={() => setShowAddModal('income')}
+            className="ml-auto w-12 h-12 rounded-2xl bg-primary text-white flex items-center justify-center shadow-lg glow-purple"
+          >
+            <Plus size={24} />
+          </button>
+        ) : null}
       </div>
 
       <DateFilter onFilterChange={handleFilterChange} />
@@ -74,12 +68,21 @@ export const IncomeDetail = ({ setView, incomeList, setShowAddModal }: IncomeDet
                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{item.subtitle}</p>
                 </div>
               </div>
-              <div className="text-right">
+              <div className="text-right flex flex-col items-end gap-1">
                 <p className="text-sm font-black text-cyan-custom">+ {item.amount.toFixed(2)}</p>
                 <div className="flex flex-col items-end">
                   <p className="text-[9px] text-gray-400 font-bold uppercase">{item.date}</p>
                   <p className="text-[9px] text-gray-400 font-bold uppercase">{item.time}</p>
                 </div>
+                {onRequestAmend ? (
+                  <button
+                    type="button"
+                    onClick={() => onRequestAmend(item)}
+                    className="text-[10px] font-black text-primary underline"
+                  >
+                    申请修改
+                  </button>
+                ) : null}
               </div>
             </div>
           ))

@@ -1,28 +1,33 @@
-import React, { useState } from 'react';
-import { motion } from 'motion/react';
-import { User, Lock, ArrowRight, ShieldCheck } from 'lucide-react';
-import { login, ApiError } from '../lib/api';
+import React, { useState } from "react";
+import { motion } from "motion/react";
+import { User, Lock, ArrowRight, ShieldCheck } from "lucide-react";
+import { login, ApiError, type LoginUser } from "../lib/api";
 
 interface LoginProps {
-  onLogin: () => void;
+  onLogin: (user: LoginUser) => void;
 }
 
 export const Login = ({ onLogin }: LoginProps) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError("");
     setIsLoading(true);
     try {
-      await login(username, password);
-      onLogin();
+      const user = await login(username, password);
+      try {
+        sessionStorage.setItem("dashboard_user", JSON.stringify(user));
+      } catch {
+        /* ignore */
+      }
+      onLogin(user);
     } catch (err) {
       const message =
-        err instanceof ApiError ? err.message : '网络错误，请稍后重试';
+        err instanceof ApiError ? err.message : "网络错误，请稍后重试";
       setError(message);
     } finally {
       setIsLoading(false);
@@ -44,7 +49,9 @@ export const Login = ({ onLogin }: LoginProps) => {
           >
             <ShieldCheck size={40} strokeWidth={2.5} />
           </motion.div>
-          <h1 className="text-3xl font-black tracking-tighter text-[#1E293B]">事业家看板</h1>
+          <h1 className="text-3xl font-black tracking-tighter text-[#1E293B]">
+            事业家看板
+          </h1>
           <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px] mt-2">
             Smart Management · Pro Version
           </p>
@@ -126,9 +133,7 @@ export const Login = ({ onLogin }: LoginProps) => {
           </form>
         </motion.div>
 
-        <p className="text-center mt-10 text-gray-400 text-xs font-bold">
-          默认账号 admin / 123456（首次由服务端种子数据创建）
-        </p>
+        <p className="text-center mt-10 text-gray-400 text-xs font-bold leading-relaxed px-2"></p>
       </div>
     </motion.div>
   );

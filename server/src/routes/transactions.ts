@@ -1,21 +1,56 @@
 import { Router } from 'express';
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
-import type { AuthedRequest } from '../middleware/authJwt.js';
+import type { StoreAuthedRequest } from '../middleware/storeMember.js';
+import {
+  isStoreBossRoleName,
+  isStoreCashierRoleName,
+  isStoreManagerRoleName,
+  isStoreShareholderRoleName,
+  restrictStoreTransactionsToOwnUser,
+} from '../lib/storeAuth.js';
+
+function snapshotRow(row: Record<string, unknown>) {
+  return JSON.stringify({
+    kind: row.kind,
+    title: row.title,
+    subtitle: row.subtitle,
+    amount: row.amount,
+    occurred_at: row.occurred_at,
+  });
+}
 
 export function createTransactionsRouter(db: Database.Database) {
   const r = Router();
 
-  r.get('/', (req: AuthedRequest, res) => {
+  r.get('/', (req: StoreAuthedRequest, res) => {
+    const ctx = req.storeCtx!;
     const kind = req.query.kind as string | undefined;
     if (kind && kind !== 'income' && kind !== 'expense') {
       res.status(400).json({ error: 'kind must be income or expense' });
       return;
     }
-    let sql =
-      `SELECT id, kind, title, subtitle, amount, occurred_at as occurredAt, created_at as createdAt
-       FROM transactions WHERE user_id = ?`;
-    const params: string[] = [req.userId!];
+    /** 老板/店长：全店；收银员：仅本人（有录入或流水权之一即可拉列表）；股东：按是否全店流水 */
+    const role = req.storeRole;
+    const canListLines =
+      ctx.isSuperAdmin ||
+      ctx.canViewTransactionLines ||
+      isStoreBossRoleName(role) ||
+      isStoreManagerRoleName(role) ||
+      (isStoreCashierRoleName(role) && (ctx.canRecord || ctx.canViewTransactionLines)) ||
+      (isStoreShareholderRoleName(role) && (ctx.canViewTransactionLines || ctx.canRecord));
+    if (!canListLines) {
+      res.status(403).json({ error: 'No permission to view transaction lines' });
+      return;
+    }
+
+    let sql = `SELECT id, kind, title, subtitle, amount, occurred_at as occurredAt, created_at as createdAt
+       FROM transactions WHERE store_id = ?`;
+    const params: unknown[] = [req.storeId!];
+    if (restrictStoreTransactionsToOwnUser(role, ctx)) {
+      sql += ' AND user_id = ?';
+      params.push(req.userId!);
+    }
     if (kind) {
       sql += ' AND kind = ?';
       params.push(kind);
@@ -25,7 +60,12 @@ export function createTransactionsRouter(db: Database.Database) {
     res.json(rows);
   });
 
-  r.post('/', (req: AuthedRequest, res) => {
+  r.post('/', (req: StoreAuthedRequest, res) => {
+    const ctx = req.storeCtx!;
+    if (!ctx.canRecord) {
+      res.status(403).json({ error: 'No permission to record transactions' });
+      return;
+    }
     const { kind, title, subtitle, amount, date } = req.body ?? {};
     if (kind !== 'income' && kind !== 'expense') {
       res.status(400).json({ error: 'kind must be income or expense' });
@@ -47,10 +87,11 @@ export function createTransactionsRouter(db: Database.Database) {
     const id = randomUUID();
     const now = new Date().toISOString();
     db.prepare(
-      `INSERT INTO transactions (id, user_id, kind, title, subtitle, amount, occurred_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO transactions (id, store_id, user_id, kind, title, subtitle, amount, occurred_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id,
+      req.storeId!,
       req.userId!,
       kind,
       title,
@@ -68,57 +109,83 @@ export function createTransactionsRouter(db: Database.Database) {
     res.status(201).json(row);
   });
 
-  r.patch('/:id', (req: AuthedRequest, res) => {
-    const { title, subtitle, amount, date, kind } = req.body ?? {};
-    const existing = db
-      .prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?')
-      .get(req.params.id, req.userId!) as Record<string, unknown> | undefined;
-    if (!existing) {
+  r.post('/:id/amendments', (req: StoreAuthedRequest, res) => {
+    const ctx = req.storeCtx!;
+    if (!ctx.canRecord) {
+      res.status(403).json({ error: 'No permission to request amendments' });
+      return;
+    }
+    const tx = db
+      .prepare('SELECT * FROM transactions WHERE id = ? AND store_id = ?')
+      .get(req.params.id, req.storeId!) as Record<string, unknown> | undefined;
+    if (!tx) {
       res.status(404).json({ error: 'not found' });
       return;
     }
-    const nextKind =
-      kind === 'income' || kind === 'expense' ? kind : (existing.kind as string);
-    let nextAmount = existing.amount as number;
-    if (amount !== undefined) {
-      const num = Number(amount);
-      if (!Number.isFinite(num)) {
-        res.status(400).json({ error: 'invalid amount' });
-        return;
-      }
-      nextKind === 'income'
-        ? (nextAmount = Math.abs(num))
-        : (nextAmount = num > 0 ? -Math.abs(num) : -Math.abs(num));
+    if (isStoreCashierRoleName(req.storeRole) && !ctx.isSuperAdmin && tx.user_id !== req.userId) {
+      res.status(403).json({ error: 'Can only amend own transactions' });
+      return;
     }
-    const nextTitle = typeof title === 'string' ? title : (existing.title as string);
-    const nextSubtitle =
-      typeof subtitle === 'string' ? subtitle : (existing.subtitle as string);
-    let occurredAt = existing.occurred_at as string;
-    if (typeof date === 'string' && date) {
-      occurredAt = `${date}T12:00:00.000Z`;
+    const pending = db
+      .prepare(
+        `SELECT id FROM transaction_amendments WHERE transaction_id = ? AND status = 'pending'`,
+      )
+      .get(req.params.id) as { id: string } | undefined;
+    if (pending) {
+      res.status(409).json({ error: 'A pending amendment already exists' });
+      return;
     }
+
+    const body = req.body ?? {};
+    const reason =
+      typeof body.reason === 'string'
+        ? body.reason.trim()
+        : typeof (body as { requestReason?: string }).requestReason === 'string'
+          ? String((body as { requestReason?: string }).requestReason).trim()
+          : '';
+    if (!reason) {
+      res.status(400).json({ error: '申请原因不能为空' });
+      return;
+    }
+    const proposed = {
+      kind: body.kind,
+      title: body.title,
+      subtitle: body.subtitle,
+      amount: body.amount,
+      date: body.date,
+      reason,
+    };
+    const aid = randomUUID();
+    const now = new Date().toISOString();
+    const prev = snapshotRow(tx);
     db.prepare(
-      `UPDATE transactions SET kind = ?, title = ?, subtitle = ?, amount = ?, occurred_at = ?
-       WHERE id = ? AND user_id = ?`,
-    ).run(nextKind, nextTitle, nextSubtitle, nextAmount, occurredAt, req.params.id, req.userId!);
+      `INSERT INTO transaction_amendments (id, transaction_id, store_id, requested_by, payload, previous_snapshot, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
+    ).run(
+      aid,
+      req.params.id,
+      req.storeId!,
+      req.userId!,
+      JSON.stringify(proposed),
+      prev,
+      now,
+    );
     const row = db
       .prepare(
-        `SELECT id, kind, title, subtitle, amount, occurred_at as occurredAt, created_at as createdAt
-         FROM transactions WHERE id = ?`,
+        `SELECT id, transaction_id as transactionId, status, payload, previous_snapshot as previousSnapshot,
+                created_at as createdAt
+         FROM transaction_amendments WHERE id = ?`,
       )
-      .get(req.params.id);
-    res.json(row);
+      .get(aid);
+    res.status(201).json(row);
   });
 
-  r.delete('/:id', (req: AuthedRequest, res) => {
-    const r0 = db
-      .prepare('DELETE FROM transactions WHERE id = ? AND user_id = ?')
-      .run(req.params.id, req.userId!);
-    if (r0.changes === 0) {
-      res.status(404).json({ error: 'not found' });
-      return;
-    }
-    res.status(204).send();
+  r.patch('/:id', (_req: StoreAuthedRequest, res) => {
+    res.status(403).json({ error: 'Direct edits are not allowed; use amendment workflow' });
+  });
+
+  r.delete('/:id', (_req: StoreAuthedRequest, res) => {
+    res.status(403).json({ error: 'Direct deletes are not allowed; use amendment workflow' });
   });
 
   return r;

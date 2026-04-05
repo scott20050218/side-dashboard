@@ -5,12 +5,16 @@ import path from 'path';
 import { fileURLToPath } from 'node:url';
 import { getDb } from './db.js';
 import { authJwt } from './middleware/authJwt.js';
+import { requireStoreMember } from './middleware/storeMember.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createTransactionsRouter } from './routes/transactions.js';
 import { createManagementRouter } from './routes/management.js';
 import { createSummaryRouter } from './routes/summary.js';
 import { createUsersRouter } from './routes/users.js';
 import { createRolesRouter } from './routes/roles.js';
+import { createStoresRouter } from './routes/stores.js';
+import { createAmendmentsRouter } from './routes/amendments.js';
+import { createAdminStoresRouter } from './routes/adminStores.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -40,11 +44,18 @@ app.use('/api/auth', createAuthRouter(db, secret));
 
 const protectedApi = express.Router();
 protectedApi.use(authJwt(secret));
-protectedApi.use('/transactions', createTransactionsRouter(db));
-protectedApi.use('/management-items', createManagementRouter(db));
-protectedApi.use('/summary', createSummaryRouter(db));
+
+protectedApi.use('/stores', createStoresRouter(db));
+
+const storeMember = requireStoreMember(db);
+protectedApi.use('/transactions', storeMember, createTransactionsRouter(db));
+protectedApi.use('/summary', storeMember, createSummaryRouter(db));
+protectedApi.use('/amendments', storeMember, createAmendmentsRouter(db));
+protectedApi.use('/management-items', storeMember, createManagementRouter(db));
+
 protectedApi.use('/users', createUsersRouter(db));
 protectedApi.use('/roles', createRolesRouter(db));
+protectedApi.use('/admin', createAdminStoresRouter(db));
 
 app.use('/api', protectedApi);
 

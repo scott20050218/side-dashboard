@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ADS } from '../mockData';
+
+const ADS = [
+  { id: 1, title: '专业法律顾问', subtitle: '为您的事业保驾护航', color: 'from-primary to-cyan-custom' },
+  { id: 2, title: '资深财务专家', subtitle: '精准理财，合规节税', color: 'from-orange-custom to-yellow-custom' },
+] as const;
 
 export const AdBanner = () => {
   const [current, setCurrent] = useState(0);
-  
+
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrent((prev) => (prev + 1) % ADS.length);

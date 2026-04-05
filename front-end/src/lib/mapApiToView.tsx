@@ -35,6 +35,7 @@ export function mapApiTransaction(row: ApiTransaction): Transaction {
 
   return {
     id: row.id,
+    kind: row.kind,
     title: row.title,
     subtitle: row.subtitle,
     amount: row.amount,
@@ -50,18 +51,25 @@ export function mapApiManagementItem(row: ApiManagementItem): ManagementItem {
   return {
     id: row.id,
     title: row.title,
+    note: row.note?.trim() ? row.note : undefined,
     status: row.status,
     time: formatTime(row.occurredAt),
     date: formatDateOnly(row.occurredAt),
     type: row.type,
+    createdByName: row.createdByName,
+    reviewedByName: row.reviewedByName,
+    reviewedAt: row.reviewedAt,
+    rejectReason: row.rejectReason,
   };
 }
 
 export function mapApiUser(row: ApiUserRow): User {
   return {
     id: row.id,
+    username: row.username ?? '',
     name: row.name,
     role: row.role,
+    roleId: row.roleId ?? '',
     status: row.status,
     avatar: row.avatar,
     email: row.email,

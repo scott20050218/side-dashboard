@@ -7,6 +7,11 @@ export interface AuthedRequest extends Request {
 
 export function authJwt(secret: string) {
   return (req: AuthedRequest, res: Response, next: NextFunction) => {
+    // CORS preflight has no Authorization; let cors() respond or downstream handle.
+    if (req.method === 'OPTIONS') {
+      next();
+      return;
+    }
     const header = req.headers.authorization;
     if (!header?.startsWith('Bearer ')) {
       res.status(401).json({ error: 'Missing or invalid Authorization header' });

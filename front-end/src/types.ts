@@ -1,11 +1,28 @@
 import React from 'react';
 
-export type View = 'login' | 'home' | 'income' | 'expense' | 'management' | 'account_detail' | 'monthly_flow' | 'report' | 'stats' | 'user_management' | 'auth_management' | 'profile';
+export type View =
+  | 'login'
+  | 'home'
+  | 'income'
+  | 'expense'
+  | 'management'
+  | 'account_detail'
+  | 'monthly_flow'
+  | 'report'
+  | 'user_management'
+  | 'auth_management'
+  | 'admin_stores'
+  | 'store_team'
+  | 'profile'
+  | 'amendments';
 
 export interface User {
   id: string;
+  username: string;
   name: string;
   role: string;
+  /** 来自 /api/users 的 role_id，用于编辑表单 */
+  roleId: string;
   status: 'active' | 'inactive';
   avatar: string;
   email: string;
@@ -19,6 +36,7 @@ export interface Role {
 
 export interface Transaction {
   id: string;
+  kind?: 'income' | 'expense';
   title: string;
   subtitle: string;
   amount: number;
@@ -32,15 +50,14 @@ export interface Transaction {
 export interface ManagementItem {
   id: string;
   title: string;
+  /** 提交时填写的备注 / 详情 */
+  note?: string;
   status: string;
   time: string;
   date: string; // YYYY-MM-DD
   type: 'notification' | 'approval';
-}
-
-export interface Ad {
-  id: number;
-  title: string;
-  subtitle: string;
-  color: string;
+  createdByName?: string;
+  reviewedByName?: string;
+  reviewedAt?: string;
+  rejectReason?: string;
 }
