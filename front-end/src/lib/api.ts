@@ -1,5 +1,7 @@
 const STORAGE_KEY = 'dashboard_token';
 const STORE_KEY = 'dashboard_store_id';
+const AUTH_EXPIRED_HINT_KEY = 'dashboard_auth_expired_hint';
+const authExpiredListeners = new Set<() => void>();
 
 function apiUrl(path: string): string {
   const base = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() ?? '';
@@ -24,6 +26,31 @@ function getToken(): string | null {
 function clearAuthToken(): void {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(STORE_KEY);
+}
+
+function markAuthExpiredHint(): void {
+  try {
+    sessionStorage.setItem(AUTH_EXPIRED_HINT_KEY, '1');
+  } catch {
+    /* ignore storage errors */
+  }
+}
+
+function notifyAuthExpired(): void {
+  authExpiredListeners.forEach((listener) => {
+    try {
+      listener();
+    } catch {
+      /* ignore listener errors */
+    }
+  });
+}
+
+export function onAuthExpired(listener: () => void): () => void {
+  authExpiredListeners.add(listener);
+  return () => {
+    authExpiredListeners.delete(listener);
+  };
 }
 
 export function getSelectedStoreId(): string | null {
@@ -85,6 +112,8 @@ async function apiFetch<T>(
   });
   if (res.status === 401) {
     clearAuthToken();
+    markAuthExpiredHint();
+    notifyAuthExpired();
   }
   if (!res.ok) {
     let msg = res.statusText;
@@ -242,6 +271,16 @@ export interface ApiAmendment {
 
 export function hasStoredToken(): boolean {
   return Boolean(getToken());
+}
+
+export function consumeAuthExpiredHint(): string | null {
+  try {
+    const v = sessionStorage.getItem(AUTH_EXPIRED_HINT_KEY);
+    if (v) sessionStorage.removeItem(AUTH_EXPIRED_HINT_KEY);
+    return v ? '登录状态已过期，请重新登录' : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchMyStores(): Promise<LoginStore[]> {

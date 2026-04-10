@@ -37,6 +37,7 @@ import {
   fetchAmendments,
   reviewAmendment,
   fetchMyStores,
+  onAuthExpired,
   type LoginUser,
   type ApiAmendment,
   isUserBossOfStore,
@@ -191,6 +192,12 @@ export default function App() {
     setIsAuthenticated(false);
     setView('login');
   }, []);
+
+  useEffect(() => {
+    return onAuthExpired(() => {
+      redirectToLogin();
+    });
+  }, [redirectToLogin]);
 
   const loadDashboard = useCallback(async () => {
     if (superAdmin) {
@@ -394,11 +401,16 @@ export default function App() {
   }, [view, showAmendmentsNav, activeStoreId, loadStoreAmendments]);
 
   useEffect(() => {
-    if (hasStoredToken()) {
+    const sessionUser = readSessionUser();
+    if (hasStoredToken() && sessionUser) {
       setIsAuthenticated(true);
-      setCurrentUser(readSessionUser());
+      setCurrentUser(sessionUser);
+      return;
     }
-  }, []);
+    if (hasStoredToken() && !sessionUser) {
+      redirectToLogin();
+    }
+  }, [redirectToLogin]);
 
   useEffect(() => {
     if (!isAuthenticated || !currentUser) return;

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { motion } from "motion/react";
 import { User, Lock, ArrowRight, ShieldCheck } from "lucide-react";
-import { login, ApiError, type LoginUser } from "../lib/api";
+import { login, ApiError, consumeAuthExpiredHint, type LoginUser } from "../lib/api";
 
 interface LoginProps {
   onLogin: (user: LoginUser) => void;
@@ -10,7 +10,7 @@ interface LoginProps {
 export const Login = ({ onLogin }: LoginProps) => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(() => consumeAuthExpiredHint() ?? "");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
